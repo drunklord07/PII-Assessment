@@ -1,0 +1,96 @@
+SET SERVEROUTPUT ON SIZE UNLIMITED;
+-- Optional: spool output to a file if using SQL*Plus or SQLcl
+-- SPOOL my_output_USER.csv
+
+DECLARE
+    v_sql         VARCHAR2(4000);
+    v_output      VARCHAR2(4000);
+    v_column_list VARCHAR2(4000);
+    v_headers     VARCHAR2(4000);
+    c_cursor      SYS_REFCURSOR;
+    row_count     NUMBER;
+    v_owner       VARCHAR2(30) := 'YOUR_SCHEMA';  -- 👈 Change this per run
+    table_count   NUMBER := 0;  -- 👈 Counter for processed tables
+
+BEGIN
+    FOR rec IN (
+        SELECT OWNER, TABLE_NAME 
+        FROM ALL_TABLES 
+        WHERE OWNER = v_owner
+        ORDER BY OWNER, TABLE_NAME
+    ) LOOP
+        v_column_list := '';
+        v_headers := '';
+        row_count := 0;
+
+        -- Build list of readable columns
+        FOR col_rec IN (
+            SELECT COLUMN_NAME, DATA_TYPE
+            FROM ALL_TAB_COLUMNS
+            WHERE OWNER = rec.OWNER AND TABLE_NAME = rec.TABLE_NAME
+            ORDER BY COLUMN_ID
+        ) LOOP
+            IF col_rec.DATA_TYPE IN (
+                'CHAR', 'NCHAR', 'VARCHAR2', 'NVARCHAR2',
+                'NUMBER', 'DATE', 'TIMESTAMP', 'FLOAT', 'CLOB'
+            ) THEN
+                IF col_rec.DATA_TYPE = 'CLOB' THEN
+                    v_column_list := v_column_list || 'REPLACE(REPLACE(DBMS_LOB.SUBSTR(' || col_rec.COLUMN_NAME || ', 4000), ''"'', ''""''), CHR(10), '' '') || '','' || ';
+                ELSE
+                    v_column_list := v_column_list || 'REPLACE(REPLACE(TO_CHAR(' || col_rec.COLUMN_NAME || '), ''"'', ''""''), CHR(10), '' '') || '','' || ';
+                END IF;
+                v_headers := v_headers || '"' || col_rec.COLUMN_NAME || '",';
+            END IF;
+        END LOOP;
+
+        IF v_column_list IS NULL THEN
+            DBMS_OUTPUT.PUT_LINE('-- ' || rec.OWNER || '.' || rec.TABLE_NAME);
+            DBMS_OUTPUT.PUT_LINE('[Skipped: no supported columns]');
+            CONTINUE;
+        END IF;
+
+        -- Trim last commas
+        v_column_list := RTRIM(v_column_list, ' || '','' || ');
+        v_headers := RTRIM(v_headers, ',');
+
+        -- Build SQL to fetch 5 rows
+        v_sql := 'SELECT ' || v_column_list ||
+                 ' FROM "' || rec.OWNER || '"."' || rec.TABLE_NAME || '" WHERE ROWNUM <= 5';
+
+        BEGIN
+            OPEN c_cursor FOR v_sql;
+
+            DBMS_OUTPUT.PUT_LINE('-- ' || rec.OWNER || '.' || rec.TABLE_NAME);
+            DBMS_OUTPUT.PUT_LINE(v_headers);  -- CSV header
+
+            LOOP
+                FETCH c_cursor INTO v_output;
+                EXIT WHEN c_cursor%NOTFOUND;
+                row_count := row_count + 1;
+                DBMS_OUTPUT.PUT_LINE(v_output);  -- CSV row
+            END LOOP;
+
+            IF row_count = 0 THEN
+                DBMS_OUTPUT.PUT_LINE('[No data]');
+            END IF;
+
+            DBMS_OUTPUT.PUT_LINE('');  -- blank line between tables
+
+            CLOSE c_cursor;
+
+            table_count := table_count + 1;  -- ✅ Increment processed table count
+
+        EXCEPTION
+            WHEN OTHERS THEN
+                DBMS_OUTPUT.PUT_LINE('[ERROR] ' || rec.OWNER || '.' || rec.TABLE_NAME || ': ' || SQLERRM);
+                DBMS_OUTPUT.PUT_LINE('');
+        END;
+    END LOOP;
+
+    -- ✅ Print total processed table count
+    DBMS_OUTPUT.PUT_LINE('==> Total tables processed: ' || table_count);
+
+END;
+/
+-- Optional: end spool
+-- SPOOL OFF
