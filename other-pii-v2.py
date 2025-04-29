@@ -8,7 +8,8 @@ input_file = "input.txt"
 
 # Utility function to create regex patterns allowing _ . - spaces
 def keyword_to_pattern(keyword):
-    return re.sub(r"\s+", r"[\s._-]*", re.escape(keyword))
+    escaped_keyword = re.escape(keyword)
+    return escaped_keyword.replace(r'\ ', r'[\s._-]*')
 
 # Updated regex patterns for PII
 pii_patterns = {
@@ -25,7 +26,8 @@ pii_patterns = {
     "VoterID": r"[A-Z]{3}[0-9]{7}"
 }
 
-# Keyword categories
+# Full keyword categories (not abbreviated)
+
 address_keys = [
     "address", "full address", "complete address", "residential address", "permanent address",
     "current address", "correspondence address", "present address", "mailing address",
@@ -81,13 +83,15 @@ insurance_keys = [
 
 # Create Word documents
 documents = {pii: Document() for pii in pii_patterns.keys()}
-documents["Address"] = Document()
-documents["Name"] = Document()
-documents["DOB"] = Document()
-documents["AccountNumber"] = Document()
-documents["CustomerID"] = Document()
-documents["SensitiveHints"] = Document()
-documents["InsurancePolicy"] = Document()
+documents.update({
+    "Address": Document(),
+    "Name": Document(),
+    "DOB": Document(),
+    "AccountNumber": Document(),
+    "CustomerID": Document(),
+    "SensitiveHints": Document(),
+    "InsurancePolicy": Document()
+})
 
 # Match counters
 match_counts = {pii: 0 for pii in pii_patterns.keys()}
@@ -173,8 +177,8 @@ for pii_type, document in documents.items():
     document.save(os.path.join(output_dir, filename))
 
 # Print summary
-print("\n🔍 PII Scan Summary:")
+print("\n PII Scan Summary:")
 print(f"- Total lines scanned: {total_lines_scanned}")
 for pii_type, count in match_counts.items():
     print(f"- {pii_type}: {count} matches found")
-print(f"\n✅ Done! Word files saved inside the '{output_dir}' folder.")
+print(f"\n Done! Word files saved inside the '{output_dir}' folder.")
