@@ -1,0 +1,38 @@
+DELIMITER $$
+
+CREATE PROCEDURE dump_first_5_rows_csv()
+BEGIN
+    DECLARE done INT DEFAULT FALSE;
+    DECLARE v_table_name VARCHAR(255);
+    DECLARE cur CURSOR FOR 
+        SELECT TABLE_NAME 
+        FROM INFORMATION_SCHEMA.TABLES 
+        WHERE TABLE_SCHEMA = DATABASE();
+
+    DECLARE CONTINUE HANDLER FOR NOT FOUND SET done = TRUE;
+
+    OPEN cur;
+
+    read_loop: LOOP
+        FETCH cur INTO v_table_name;
+        IF done THEN
+            LEAVE read_loop;
+        END IF;
+
+        SET @sql = CONCAT(
+            'SELECT ''', v_table_name, ''' AS table_name, ',
+            'CONCAT_WS('','', * ) AS csv_row ',
+            'FROM `', v_table_name, '` ',
+            'LIMIT 5'
+        );
+
+        PREPARE stmt FROM @sql;
+        EXECUTE stmt;
+        DEALLOCATE PREPARE stmt;
+
+    END LOOP;
+
+    CLOSE cur;
+END$$
+
+DELIMITER ;
