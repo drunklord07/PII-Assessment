@@ -18,7 +18,7 @@ WHERE owner NOT IN (
     'WMSYS', 'EXFSYS', 'SYSMAN', 'FLOWS_FILES', 'APEX_PUBLIC_USER',
     'ANONYMOUS', 'DVSYS', 'GSMADMIN_INTERNAL', 'LBACSYS'
 )
-
+-- Wrap everything in a subquery to apply correct ORDER BY
 ORDER BY 
-  CASE WHEN owner = 'TOTAL' THEN 1 ELSE 0 END,
-  table_count DESC;
+    CASE WHEN owner = 'TOTAL' THEN 2 ELSE 1 END,
+    table_count DESC;
