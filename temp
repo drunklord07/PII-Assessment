@@ -6,8 +6,5 @@ WHERE owner NOT IN (
     'WMSYS', 'EXFSYS', 'SYSMAN', 'FLOWS_FILES', 'APEX_PUBLIC_USER',
     'ANONYMOUS', 'DVSYS', 'GSMADMIN_INTERNAL', 'LBACSYS'
 )
-AND owner NOT IN (
-    SELECT username FROM dba_users WHERE ORACLE_MAINTAINED = 'Y'
-)
 GROUP BY owner
 ORDER BY table_count DESC;
