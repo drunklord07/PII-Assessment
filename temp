@@ -1,24 +1,26 @@
-SELECT owner, COUNT(*) AS table_count
-FROM all_tables
-WHERE owner NOT IN (
-    'SYS', 'SYSTEM', 'XDB', 'ORDSYS', 'CTXSYS', 'DBSNMP', 'OUTLN',
-    'ORDDATA', 'ORDPLUGINS', 'SI_INFORMTN_SCHEMA', 'MDSYS', 'OLAPSYS',
-    'WMSYS', 'EXFSYS', 'SYSMAN', 'FLOWS_FILES', 'APEX_PUBLIC_USER',
-    'ANONYMOUS', 'DVSYS', 'GSMADMIN_INTERNAL', 'LBACSYS'
-)
-GROUP BY owner
+SELECT *
+FROM (
+    SELECT owner, COUNT(*) AS table_count
+    FROM all_tables
+    WHERE owner NOT IN (
+        'SYS', 'SYSTEM', 'XDB', 'ORDSYS', 'CTXSYS', 'DBSNMP', 'OUTLN',
+        'ORDDATA', 'ORDPLUGINS', 'SI_INFORMTN_SCHEMA', 'MDSYS', 'OLAPSYS',
+        'WMSYS', 'EXFSYS', 'SYSMAN', 'FLOWS_FILES', 'APEX_PUBLIC_USER',
+        'ANONYMOUS', 'DVSYS', 'GSMADMIN_INTERNAL', 'LBACSYS'
+    )
+    GROUP BY owner
 
-UNION ALL
+    UNION ALL
 
-SELECT 'TOTAL' AS owner, COUNT(*)
-FROM all_tables
-WHERE owner NOT IN (
-    'SYS', 'SYSTEM', 'XDB', 'ORDSYS', 'CTXSYS', 'DBSNMP', 'OUTLN',
-    'ORDDATA', 'ORDPLUGINS', 'SI_INFORMTN_SCHEMA', 'MDSYS', 'OLAPSYS',
-    'WMSYS', 'EXFSYS', 'SYSMAN', 'FLOWS_FILES', 'APEX_PUBLIC_USER',
-    'ANONYMOUS', 'DVSYS', 'GSMADMIN_INTERNAL', 'LBACSYS'
+    SELECT 'TOTAL' AS owner, COUNT(*)
+    FROM all_tables
+    WHERE owner NOT IN (
+        'SYS', 'SYSTEM', 'XDB', 'ORDSYS', 'CTXSYS', 'DBSNMP', 'OUTLN',
+        'ORDDATA', 'ORDPLUGINS', 'SI_INFORMTN_SCHEMA', 'MDSYS', 'OLAPSYS',
+        'WMSYS', 'EXFSYS', 'SYSMAN', 'FLOWS_FILES', 'APEX_PUBLIC_USER',
+        'ANONYMOUS', 'DVSYS', 'GSMADMIN_INTERNAL', 'LBACSYS'
+    )
 )
--- Wrap everything in a subquery to apply correct ORDER BY
 ORDER BY 
-    CASE WHEN owner = 'TOTAL' THEN 2 ELSE 1 END,
+    CASE WHEN owner = 'TOTAL' THEN 1 ELSE 0 END,
     table_count DESC;
