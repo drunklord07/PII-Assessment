@@ -1,50 +1,13 @@
-SET SERVEROUTPUT ON SIZE UNLIMITED
-DECLARE
-    CURSOR tbl_cursor IS
-        SELECT owner, table_name
-        FROM all_tables
-        WHERE owner NOT IN ('SYS', 'SYSTEM')  -- exclude system schemas
-          AND nested = 'NO'
-        ORDER BY owner, table_name;
-
-    v_sql     VARCHAR2(4000);
-    v_col_sql VARCHAR2(4000);
-    v_owner   VARCHAR2(128);
-    v_table   VARCHAR2(128);
-    v_col     VARCHAR2(128);
-    v_value   VARCHAR2(4000);
-    v_cnt     NUMBER := 0;
-BEGIN
-    FOR tbl IN tbl_cursor LOOP
-        v_owner := tbl.owner;
-        v_table := tbl.table_name;
-
-        FOR col IN (
-            SELECT column_name
-            FROM all_tab_columns
-            WHERE owner = v_owner
-              AND table_name = v_table
-            ORDER BY column_id
-        ) LOOP
-            v_col := col.column_name;
-
-            v_sql := 'SELECT TO_CHAR(' || DBMS_ASSERT.simple_sql_name(v_col) || ') FROM ' ||
-                     DBMS_ASSERT.schema_name(v_owner) || '.' || DBMS_ASSERT.simple_sql_name(v_table) ||
-                     ' WHERE ROWNUM <= 5';
-
-            BEGIN
-                EXECUTE IMMEDIATE v_sql BULK COLLECT INTO
-                    v_value LIMIT 5;
-
-                FOR i IN 1 .. LEAST(5, v_value.COUNT) LOOP
-                    DBMS_OUTPUT.PUT_LINE(v_owner || ',' || v_table || ',' || v_col || ',' || v_value(i));
-                END LOOP;
-
-            EXCEPTION
-                WHEN OTHERS THEN
-                    DBMS_OUTPUT.PUT_LINE(v_owner || ',' || v_table || ',' || v_col || ',<ERROR>');
-            END;
-        END LOOP;
-    END LOOP;
-END;
-/
+SELECT owner, COUNT(*) AS table_count
+FROM all_tables
+WHERE owner NOT IN (
+    'SYS', 'SYSTEM', 'XDB', 'ORDSYS', 'CTXSYS', 'DBSNMP', 'OUTLN',
+    'ORDDATA', 'ORDPLUGINS', 'SI_INFORMTN_SCHEMA', 'MDSYS', 'OLAPSYS',
+    'WMSYS', 'EXFSYS', 'SYSMAN', 'FLOWS_FILES', 'APEX_PUBLIC_USER',
+    'ANONYMOUS', 'DVSYS', 'GSMADMIN_INTERNAL', 'LBACSYS'
+)
+AND owner NOT IN (
+    SELECT username FROM dba_users WHERE ORACLE_MAINTAINED = 'Y'
+)
+GROUP BY owner
+ORDER BY table_count DESC;
