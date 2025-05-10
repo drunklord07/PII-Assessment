@@ -48,7 +48,7 @@ compiled_keywords = {
     for cat, keys in keyword_groups.items()
 }
 
-# --- PROCESSING FUNCTION ---
+# --- CHUNK PROCESSING FUNCTION ---
 def process_chunk(args):
     start_line, lines = args
     results = {k: [] for k in list(compiled_pii.keys()) + list(compiled_keywords.keys())}
@@ -70,7 +70,7 @@ def process_chunk(args):
                         continue
                 results[pii_type].append((line_num, line.strip(), match.span(), value))
 
-        # Keyword hint detection
+        # Keyword Hints
         for cat, patterns in compiled_keywords.items():
             for pattern in patterns:
                 match = pattern.search(lowered)
@@ -80,7 +80,7 @@ def process_chunk(args):
 
     return results
 
-# --- MERGE FUNCTION ---
+# --- MERGE RESULTS ---
 def merge_results(partials):
     merged = {k: [] for k in list(compiled_pii.keys()) + list(compiled_keywords.keys())}
     for part in partials:
@@ -88,10 +88,11 @@ def merge_results(partials):
             merged[k].extend(v)
     return merged
 
-# --- SAVE TO DOCX ---
+# --- SAVE TO DOCX WITH PROGRESS BAR ---
 def save_results(results):
     os.makedirs(OUTPUT_DIR, exist_ok=True)
-    for category, items in results.items():
+    print("\n📝 Writing Word documents...")
+    for category, items in tqdm(results.items(), desc="📄 Saving DOCX", unit="file"):
         if not items:
             continue
         doc = Document()
@@ -108,7 +109,7 @@ def save_results(results):
                 red.font.color.rgb = RGBColor(255, 0, 0)
         doc.save(os.path.join(OUTPUT_DIR, f"{category}_matches.docx"))
 
-# --- MAIN ENTRY POINT ---
+# --- MAIN ---
 def main():
     with open(INPUT_FILE, "r", encoding="utf-8") as f:
         lines = f.readlines()
@@ -118,7 +119,12 @@ def main():
     print(f"🔍 Scanning {len(lines)} lines using {cpu_count()} cores...\n")
 
     with Pool(cpu_count()) as pool:
-        partial_results = list(tqdm(pool.imap(process_chunk, chunks), total=len(chunks), desc="🔍 Progress", unit="chunk"))
+        partial_results = list(tqdm(
+            pool.imap(process_chunk, chunks),
+            total=len(chunks),
+            desc="🔍 Scanning Chunks",
+            unit="chunk"
+        ))
 
     final_results = merge_results(partial_results)
     save_results(final_results)
