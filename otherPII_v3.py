@@ -1,7 +1,6 @@
 import os
 import re
 from multiprocessing import Pool, cpu_count
-from concurrent.futures import ThreadPoolExecutor
 from docx import Document
 from docx.shared import RGBColor
 from tqdm import tqdm
@@ -17,7 +16,7 @@ pii_patterns = {
     "PAN": r"(?<![A-Z0-9])[A-Z]{5}[0-9]{4}[A-Z](?![A-Z0-9])",
     "Email": r"(?<![\w])[\w\.-]+@[\w\.-]+\.[a-zA-Z]{2,10}(?![\w])",
     "Mobile": r"(?<!\d)(?:\+91[\-\s]?|91[\-\s]?|91|0)?[6-9]\d{9}(?!\d)",
-    "UPI": r"(?<![\w])[a-zA-Z0-9.\-_]{2,256}@[a-zA-Z0-9]{2,64}(?![\w])",
+    "UPI": r"(?<![\w])[a-zA-Z0-9.\-_]{2,256}@[a-zA-Z]{2,64}(?![\w])",
     "MAC": r"(?:[0-9A-Fa-f]{2}[:-]){5}(?:[0-9A-Fa-f]{2})",
     "IP": r"\b(?:[0-9]{1,3}\.){3}[0-9]{1,3}\b",
     "Coordinates": r"-?\d{1,3}\.\d+,\s*-?\d{1,3}\.\d+",
@@ -51,8 +50,7 @@ compiled_keywords = {
 # --- SCANNING FUNCTION ---
 def process_chunk(args):
     start_line, lines = args
-    results = {k: [] for k in list(compiled_pii.keys()) + list(compiled_keywords.keys())}
-
+    results = {k: [] for k in list(compiled_pii) + list(compiled_keywords)}
     for idx, line in enumerate(lines):
         line_num = start_line + idx + 1
         lowered = line.lower()
@@ -75,18 +73,17 @@ def process_chunk(args):
                 if match:
                     results[cat].append((line_num, line.strip(), None, match.group()))
                     break
-
     return results
 
 # --- MERGE RESULTS ---
 def merge_results(partials):
-    merged = {k: [] for k in list(compiled_pii.keys()) + list(compiled_keywords.keys())}
+    merged = {k: [] for k in list(compiled_pii) + list(compiled_keywords)}
     for part in partials:
         for k, v in part.items():
             merged[k].extend(v)
     return merged
 
-# --- WORD FILE SAVER ---
+# --- SAVE INDIVIDUAL DOCX FILE ---
 def save_docx_batch(category, batch_index, items):
     folder = os.path.join(OUTPUT_DIR, category)
     os.makedirs(folder, exist_ok=True)
@@ -98,32 +95,54 @@ def save_docx_batch(category, batch_index, items):
         if span:
             start, end = span
             para.add_run(text[:start])
-            red = para.add_run(match_text)
-            red.font.color.rgb = RGBColor(255, 0, 0)
+            match = para.add_run(match_text)
+            match.font.color.rgb = RGBColor(255, 0, 0)
             para.add_run(text[end:])
         else:
-            red = para.add_run(text)
-            red.font.color.rgb = RGBColor(255, 0, 0)
+            match = para.add_run(text)
+            match.font.color.rgb = RGBColor(255, 0, 0)
     doc.save(filename)
 
+# --- SAVE RESULTS SEQUENTIALLY ---
 def save_results(results):
-    print("\n📝 Writing Word documents in parallel...")
+    print("\n📝 Saving Word files...")
     jobs = []
     for category, items in results.items():
         if not items:
             continue
-        # Split into batches
         for i in range(0, len(items), SAVE_BATCH_SIZE):
             batch = items[i:i + SAVE_BATCH_SIZE]
             jobs.append((category, i // SAVE_BATCH_SIZE, batch))
 
-    with ThreadPoolExecutor() as executor:
-        list(tqdm(
-            executor.map(lambda args: save_docx_batch(*args), jobs),
-            total=len(jobs),
-            desc="📄 Saving DOCX Files",
-            unit="file"
-        ))
+    for args in tqdm(jobs, desc="📄 Saving DOCX Files", unit="file"):
+        save_docx_batch(*args)
+
+# --- MERGE TO ONE DOCX PER FOLDER ---
+def merge_docx_files():
+    print("\n📎 Merging and cleaning up Word files...")
+    folders = [d for d in os.listdir(OUTPUT_DIR) if os.path.isdir(os.path.join(OUTPUT_DIR, d))]
+    for folder in tqdm(folders, desc="🧩 Merging per Folder", unit="folder"):
+        folder_path = os.path.join(OUTPUT_DIR, folder)
+        docx_files = sorted([
+            f for f in os.listdir(folder_path)
+            if f.endswith(".docx") and not f.endswith("_merged.docx")
+        ])
+
+        if not docx_files:
+            continue
+
+        merged_doc = Document()
+        for filename in docx_files:
+            file_path = os.path.join(folder_path, filename)
+            sub_doc = Document(file_path)
+            for para in sub_doc.paragraphs:
+                merged_doc.add_paragraph(para.text)
+
+        merged_filename = os.path.join(folder_path, f"{folder}_merged.docx")
+        merged_doc.save(merged_filename)
+
+        for filename in docx_files:
+            os.remove(os.path.join(folder_path, filename))
 
 # --- MAIN EXECUTION ---
 def main():
@@ -143,11 +162,12 @@ def main():
 
     final_results = merge_results(partials)
     save_results(final_results)
+    merge_docx_files()
 
     print("\n📊 PII Scan Summary:")
     for k, v in final_results.items():
         print(f"- {k}: {len(v)} matches")
-    print(f"\n✅ Done! Files saved in '{OUTPUT_DIR}' with subfolders per PII type.")
+    print(f"\n✅ All merged Word files saved in '{OUTPUT_DIR}/<PII>/' folders.")
 
 if __name__ == "__main__":
     main()
