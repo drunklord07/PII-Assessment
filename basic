@@ -1,0 +1,4 @@
+SELECT owner, COUNT(*) AS table_count FROM all_tables GROUP BY owner UNION ALL SELECT 'TOTAL', COUNT(*) FROM all_tables;
+
+
+SELECT 'SELECT * FROM "' || owner || '"."' || table_name || '" WHERE ROWNUM <= 5;' FROM all_tables WHERE owner = 'YOUR_OWNER';
