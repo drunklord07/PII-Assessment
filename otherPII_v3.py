@@ -3,11 +3,12 @@ import re
 from multiprocessing import Pool, cpu_count
 from docx import Document
 from docx.shared import RGBColor
+from tqdm import tqdm
 
 # --- CONFIGURATION ---
 INPUT_FILE = "input.txt"
 OUTPUT_DIR = "output"
-CHUNK_SIZE = 1000  # Lines per chunk for multiprocessing
+CHUNK_SIZE = 1000  # lines per chunk
 
 # --- PII REGEX PATTERNS ---
 pii_patterns = {
@@ -47,7 +48,7 @@ compiled_keywords = {
     for cat, keys in keyword_groups.items()
 }
 
-# --- CHUNK PROCESSING FUNCTION ---
+# --- PROCESSING FUNCTION ---
 def process_chunk(args):
     start_line, lines = args
     results = {k: [] for k in list(compiled_pii.keys()) + list(compiled_keywords.keys())}
@@ -56,18 +57,20 @@ def process_chunk(args):
         line_num = start_line + idx + 1
         lowered = line.lower()
 
-        # Regex PII
+        # Regex PII detection
         for pii_type, pattern in compiled_pii.items():
             for match in pattern.finditer(line):
                 value = match.group()
                 if pii_type == "IP":
                     octets = value.split('.')
-                    if (octets[0] == '10' or (octets[0] == '172' and 16 <= int(octets[1]) <= 31)
-                        or (octets[0] == '192' and octets[1] == '168') or value == '127.0.0.1'):
+                    if (octets[0] == '10' or
+                        (octets[0] == '172' and 16 <= int(octets[1]) <= 31) or
+                        (octets[0] == '192' and octets[1] == '168') or
+                        value == '127.0.0.1'):
                         continue
                 results[pii_type].append((line_num, line.strip(), match.span(), value))
 
-        # Keyword Hints
+        # Keyword hint detection
         for cat, patterns in compiled_keywords.items():
             for pattern in patterns:
                 match = pattern.search(lowered)
@@ -77,7 +80,7 @@ def process_chunk(args):
 
     return results
 
-# --- MERGE RESULTS ---
+# --- MERGE FUNCTION ---
 def merge_results(partials):
     merged = {k: [] for k in list(compiled_pii.keys()) + list(compiled_keywords.keys())}
     for part in partials:
@@ -85,7 +88,7 @@ def merge_results(partials):
             merged[k].extend(v)
     return merged
 
-# --- GENERATE DOCX FILES ---
+# --- SAVE TO DOCX ---
 def save_results(results):
     os.makedirs(OUTPUT_DIR, exist_ok=True)
     for category, items in results.items():
@@ -112,14 +115,15 @@ def main():
 
     chunks = [(i, lines[i:i+CHUNK_SIZE]) for i in range(0, len(lines), CHUNK_SIZE)]
 
+    print(f"🔍 Scanning {len(lines)} lines using {cpu_count()} cores...\n")
+
     with Pool(cpu_count()) as pool:
-        partial_results = pool.map(process_chunk, chunks)
+        partial_results = list(tqdm(pool.imap(process_chunk, chunks), total=len(chunks), desc="🔍 Progress", unit="chunk"))
 
     final_results = merge_results(partial_results)
     save_results(final_results)
 
-    print("\n🔍 PII Scan Summary:")
-    print(f"- Total lines scanned: {len(lines)}")
+    print("\n📊 PII Scan Summary:")
     for k, v in final_results.items():
         print(f"- {k}: {len(v)} matches")
     print(f"\n✅ Done! Files saved in '{OUTPUT_DIR}' folder.")
